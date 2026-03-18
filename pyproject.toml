@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stemforge"
+version = "0.1.0"
+description = "Capture Spotify audio, separate stems, and generate MIDI files"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+
+dependencies = [
+    "spotipy>=2.24.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "pydantic-settings>=2.3.0",
+    "python-dotenv>=1.0.0",
+    "demucs>=4.0.1",
+    "torch>=2.10.0",
+    "torchaudio>=2.5.0",
+    "basic-pitch[onnx]>=0.3.0",
+    "soundfile>=0.12.1",
+    "numpy>=1.24.0",
+    "setuptools>=68.0.0,<71.0.0",
+]
+
+[project.scripts]
+stemforge = "stemforge.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+torchaudio = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stemforge"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
