@@ -9,6 +9,9 @@ description = "Capture Spotify audio, separate stems, and generate MIDI files"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 license = { text = "MIT" }
+authors = [
+    { name = "Thomas Bechtold", email = "thomas.bechtold@jpberlin.de" },
+]
 
 dependencies = [
     "spotipy>=2.24.0",
