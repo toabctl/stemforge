@@ -37,6 +37,8 @@ dev = [
     "pytest-mock>=3.14.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "pre-commit>=3.0.0",
+    "tox>=4.0.0",
 ]
 
 [tool.uv.sources]
