@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Capture Spotify audio, separate stems, and generate MIDI files"
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
-license = { text = "MIT" }
+license = { text = "GPL-3.0-or-later" }
 authors = [
     { name = "Thomas Bechtold", email = "thomas.bechtold@jpberlin.de" },
 ]
