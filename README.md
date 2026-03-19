@@ -8,7 +8,7 @@ stemforge run "Daft Punk Get Lucky"
 
 ```
 output/daft-punk-get-lucky-20260318T143022/
-├── captured.wav          ← 30s system audio capture
+├── captured.wav          ← 60s audio capture
 ├── stems/
 │   ├── vocals.wav
 │   ├── drums.wav
@@ -24,16 +24,16 @@ output/daft-punk-get-lucky-20260318T143022/
 ## How it works
 
 1. **Search** — finds the track via the Spotify Web API
-2. **Capture** — triggers playback, waits for buffering, then records system audio via `parecord` (PulseAudio/PipeWire monitor source)
-3. **Separate** — runs [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs` model) to split into vocals / drums / bass / other
+2. **Capture** — triggers playback on Spotify, discovers the Spotify stream node in the PipeWire graph via `pw-dump`, then records directly from it using `pw-record` + `pw-link` (no sink monitor required)
+3. **Separate** — runs [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs_ft` model) to split into vocals / drums / bass / other
 4. **Convert** — runs [Basic-Pitch](https://github.com/spotify/basic-pitch) (Spotify Research) on each stem to produce MIDI files
 
 ## Requirements
 
-- Linux with PulseAudio or PipeWire
-- `parecord` (`pulseaudio-utils` package)
+- Linux with **PipeWire** (`pw-record`, `pw-link`, `pw-dump`, `pw-play`)
 - A **Spotify Premium** account
-- The Spotify desktop app (or web player) open and playing — the Web API needs an active device
+- The Spotify desktop app open and playing — the Web API needs an active device
+- Spotify volume must be non-zero (capture records the actual output stream)
 
 ## Setup
 
@@ -47,7 +47,7 @@ uv sync
 
 1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
 2. Create a new app
-3. Under **Redirect URIs**, add: `http://localhost:8888/callback`
+3. Under **Redirect URIs**, add: `http://127.0.0.1:8888/callback`
 4. Copy your **Client ID** and **Client Secret**
 
 ### 3. Configure credentials
@@ -75,24 +75,27 @@ uv run stemforge run "Daft Punk Get Lucky" --duration 45
 uv run stemforge run "artist:Joy Division track:Atmosphere" --verbose
 ```
 
+### Play back stems
+
+```bash
+uv run stemforge play                     # latest session, all stems
+uv run stemforge play --stem vocals       # single stem only
+uv run stemforge play --duration 30       # 30 seconds per stem
+uv run stemforge play path/to/session/    # specific session
+```
+
+Stems play in order: vocals → other → drums → bass. Press Ctrl+C to skip to the next stem; Ctrl+C twice to quit.
+
 ### Check available Spotify devices
 
 ```bash
 uv run stemforge devices
 ```
 
-Open the Spotify app first — the pipeline needs an active device.
-
-### Check available monitor sources
-
-```bash
-uv run stemforge sources
-```
-
-By default `@DEFAULT_MONITOR@` is used (auto-detected). To pin a specific source:
+Open the Spotify app first — the pipeline needs an active device. To pin a preferred device:
 
 ```env
-PULSE_MONITOR_SOURCE=alsa_output.pci-0000_07_00.6.analog-stereo.monitor
+SPOTIFY_DEVICE_NAME=my-computer
 ```
 
 ### Run individual stages
@@ -117,12 +120,18 @@ All settings can be set in `.env` or as environment variables:
 |---|---|---|
 | `SPOTIFY_CLIENT_ID` | *(required)* | Spotify app Client ID |
 | `SPOTIFY_CLIENT_SECRET` | *(required)* | Spotify app Client Secret |
-| `SPOTIFY_REDIRECT_URI` | `http://localhost:8888/callback` | OAuth redirect URI |
-| `PULSE_MONITOR_SOURCE` | `@DEFAULT_MONITOR@` | PulseAudio/PipeWire monitor source |
-| `CAPTURE_DURATION_SECONDS` | `30` | Recording length in seconds |
-| `DEMUCS_MODEL` | `htdemucs` | Demucs model name |
+| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:8888/callback` | OAuth redirect URI |
+| `SPOTIFY_DEVICE_NAME` | *(auto)* | Preferred Spotify device name (partial match) |
+| `PIPEWIRE_SINK` | *(auto-discovered)* | PipeWire stream node name to capture from; leave empty to auto-detect |
+| `CAPTURE_DURATION_SECONDS` | `60` | Recording length in seconds (5–300) |
+| `CAPTURE_SAMPLE_RATE` | `44100` | Sample rate in Hz |
+| `CAPTURE_CHANNELS` | `2` | Channels (1=mono, 2=stereo) |
+| `DEMUCS_MODEL` | `htdemucs_ft` | Demucs model name |
 | `DEMUCS_DEVICE` | `cpu` | `cpu`, `cuda`, or `mps` |
-| `DEMUCS_SHIFTS` | `1` | Random shifts for quality (higher = slower) |
+| `DEMUCS_SHIFTS` | `2` | Random shifts for quality (higher = slower) |
+| `MIDI_ONSET_THRESHOLD` | `0.3` | Note onset sensitivity (lower = more notes) |
+| `MIDI_FRAME_THRESHOLD` | `0.1` | Note frame sensitivity (lower = more notes) |
+| `MIDI_MIN_NOTE_LENGTH` | `127.7` | Minimum note length in milliseconds |
 | `PLAYBACK_START_DELAY_SECONDS` | `3.0` | Wait after play command before recording |
 | `OUTPUT_DIR` | `output` | Base directory for session output |
 
@@ -137,10 +146,14 @@ uv run ruff check src/ tests/
 
 # Type check
 uv run mypy src/
+
+# Run all checks via tox
+uv run tox
 ```
 
 ## Notes
 
 - Stem separation is CPU-bound and takes a few minutes without a GPU. Set `DEMUCS_DEVICE=cuda` if you have one.
 - MIDI quality is best on melodic content (vocals, bass, lead instruments). Drums produce rhythm patterns rather than pitched notes.
-- The capture relies on the song actually playing through your system audio. Make sure your Spotify volume is not muted.
+- Spotify volume must not be zero — the capture records the actual audio stream sent to PipeWire.
+- Auto-discovery polls PipeWire every 0.5 s for up to `PLAYBACK_START_DELAY_SECONDS` waiting for Spotify's stream node to appear. If discovery fails, set `PIPEWIRE_SINK` explicitly to the node name shown by `pw-dump`.
