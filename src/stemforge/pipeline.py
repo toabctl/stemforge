@@ -73,9 +73,7 @@ class Pipeline:
         track = self._spotify.search(query)
 
         # ── Stage 2: Find a playback device ──────────────────────────────────
-        device = self._spotify.get_active_device(
-            preferred_name=self._settings.spotify_device_name
-        )
+        device = self._spotify.get_active_device(preferred_name=self._settings.spotify_device_name)
 
         # ── Stage 3: Create output directory tree ────────────────────────────
         session = build_session_paths(
@@ -139,7 +137,7 @@ def _assert_audio_not_silent(wav_path: Path) -> None:
     different device and the monitor records nothing but zeros.
     """
     data, _ = sf.read(str(wav_path), dtype="float32")
-    rms = float(np.sqrt(np.mean(data ** 2)))
+    rms = float(np.sqrt(np.mean(data**2)))
     log.debug("Captured audio RMS: %.6f", rms)
     if rms < _SILENCE_RMS_THRESHOLD:
         raise CaptureError(

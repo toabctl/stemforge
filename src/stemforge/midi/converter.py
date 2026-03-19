@@ -27,10 +27,10 @@ log = logging.getLogger(__name__)
 # Per-stem frequency constraints (Hz).
 # None means "no limit" — Basic-Pitch will use its full detection range.
 _STEM_FREQ_RANGES: dict[str, tuple[Optional[float], Optional[float]]] = {
-    "vocals": (80.0, 1100.0),   # soprano high C ≈ 1047 Hz, bass low ≈ 82 Hz
-    "bass":   (40.0, 300.0),    # low B0 ≈ 31 Hz, keeps it well below midrange
-    "other":  (80.0, 8000.0),   # wide — could be keys, guitar, horns, strings
-    "drums":  (40.0, 8000.0),   # full range; captures both kick body and hi-hat hits
+    "vocals": (80.0, 1100.0),  # soprano high C ≈ 1047 Hz, bass low ≈ 82 Hz
+    "bass": (40.0, 300.0),  # low B0 ≈ 31 Hz, keeps it well below midrange
+    "other": (80.0, 8000.0),  # wide — could be keys, guitar, horns, strings
+    "drums": (40.0, 8000.0),  # full range; captures both kick body and hi-hat hits
 }
 _DEFAULT_FREQ_RANGE: tuple[Optional[float], Optional[float]] = (None, None)
 
@@ -116,9 +116,7 @@ class MidiConverter:
             )
             midi_data.write(str(out_path))
         except Exception as exc:
-            raise ConversionError(
-                f"Basic-Pitch failed on {stem_wav.name}: {exc}"
-            ) from exc
+            raise ConversionError(f"Basic-Pitch failed on {stem_wav.name}: {exc}") from exc
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -129,9 +127,7 @@ class MidiConverter:
         log.info("Wrote MIDI (%d bytes): %s", size_bytes, out_path.name)
         return out_path
 
-    def convert_all(
-        self, stem_paths: dict[str, Path], output_dir: Path
-    ) -> dict[str, Path]:
+    def convert_all(self, stem_paths: dict[str, Path], output_dir: Path) -> dict[str, Path]:
         """Convert every stem, skipping individual failures gracefully."""
         midi_paths: dict[str, Path] = {}
         for name, wav_path in stem_paths.items():
@@ -152,6 +148,4 @@ class MidiConverter:
             log.info("Loading Basic-Pitch ONNX model from %s…", model_path)
             return Model(model_path)
         except Exception as exc:
-            raise ConversionError(
-                f"Failed to load Basic-Pitch model: {exc}"
-            ) from exc
+            raise ConversionError(f"Failed to load Basic-Pitch model: {exc}") from exc

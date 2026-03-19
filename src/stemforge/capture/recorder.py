@@ -82,7 +82,11 @@ class AudioRecorder:
             proc.communicate()
             raise CaptureError(f"{tool} did not exit cleanly after SIGTERM")
 
-        if proc.returncode not in (0, 1, -15):  # 1 = pw-record SIGTERM, -15 = parecord SIGTERM
+        if proc.returncode not in (
+            0,
+            1,
+            -15,
+        ):  # 1 = pw-record SIGTERM, -15 = parecord SIGTERM
             stderr_text = stderr_bytes.decode(errors="replace").strip()
             raise CaptureError(f"{tool} exited with code {proc.returncode}: {stderr_text}")
 
@@ -94,21 +98,20 @@ class AudioRecorder:
         return output_path
 
     @staticmethod
-    def _pw_record_cmd(
-        output_path: Path, target: str, rate: int, channels: int
-    ) -> list[str]:
+    def _pw_record_cmd(output_path: Path, target: str, rate: int, channels: int) -> list[str]:
         return [
             "pw-record",
-            "--target", target,
-            "--rate", str(rate),
-            "--channels", str(channels),
+            "--target",
+            target,
+            "--rate",
+            str(rate),
+            "--channels",
+            str(channels),
             str(output_path),
         ]
 
     @staticmethod
-    def _parecord_cmd(
-        output_path: Path, source: str, rate: int, channels: int
-    ) -> list[str]:
+    def _parecord_cmd(output_path: Path, source: str, rate: int, channels: int) -> list[str]:
         # Explicitly request s16le to avoid the 32-bit header mislabelling bug
         return [
             "parecord",

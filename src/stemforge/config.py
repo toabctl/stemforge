@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     spotify_device_name: str = Field(
         default="",
-        description="Preferred Spotify device name (partial match, case-insensitive). Leave empty to use the active device.",
+        description="Preferred Spotify device name (partial match, case-insensitive).",
     )
 
     # ── Audio capture ────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         default=2,
         ge=1,
         le=10,
-        description="Number of random shifts for equivariant stabilisation (higher = slower but better)",
+        description="Random shifts for equivariant stabilisation (higher = slower but better).",
     )
 
     # ── Basic-Pitch MIDI conversion ──────────────────────────────────────────

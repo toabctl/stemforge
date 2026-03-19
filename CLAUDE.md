@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Dependencies
+
+All runtime and dev dependencies must be declared in `pyproject.toml`. Do not add dependency lists to `tox.ini` or other tool config files.
+
 ## Commits
 
 - Each commit must represent a single logical change — do not bundle unrelated modifications.

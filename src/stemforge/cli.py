@@ -11,7 +11,6 @@ Commands:
 
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -45,11 +44,14 @@ def _load_settings() -> Settings:
         return Settings()
     except Exception as exc:
         err_console.print(f"[bold red]Configuration error:[/] {exc}")
-        err_console.print("Copy [cyan].env.example[/] to [cyan].env[/] and fill in your credentials.")
+        err_console.print(
+            "Copy [cyan].env.example[/] to [cyan].env[/] and fill in your credentials."
+        )
         raise typer.Exit(code=1)
 
 
 # ── run command ───────────────────────────────────────────────────────────────
+
 
 @app.command()
 def run(
@@ -104,6 +106,7 @@ def run(
 
 
 # ── play command ─────────────────────────────────────────────────────────────
+
 
 @app.command()
 def play(
@@ -161,7 +164,9 @@ def play(
 
     limit = duration or None
     dur_label = f"{limit}s" if limit else "full"
-    rprint(f"\n[bold cyan]Playing stems[/] from [dim]{session_dir.name}[/] [dim]({dur_label} each)[/]")
+    rprint(
+        f"\n[bold cyan]Playing stems[/] from [dim]{session_dir.name}[/] [dim]({dur_label} each)[/]"
+    )
     rprint("[dim]Ctrl+C to skip · Ctrl+C twice to quit[/]\n")
 
     for wav in wav_files:
@@ -183,7 +188,9 @@ def play(
             rprint("  [yellow]skipped[/]")
             try:
                 # Brief window: a second Ctrl+C quits entirely
-                import time; time.sleep(0.3)
+                import time
+
+                time.sleep(0.3)
             except KeyboardInterrupt:
                 rprint("\n[yellow]Stopped.[/]")
                 raise typer.Exit(code=0)
@@ -204,6 +211,7 @@ def _latest_session(output_dir: Path) -> Optional[Path]:
 
 
 # ── devices command ───────────────────────────────────────────────────────────
+
 
 @app.command()
 def devices(
@@ -245,12 +253,12 @@ def devices(
 
 # ── sources command ───────────────────────────────────────────────────────────
 
+
 @app.command()
 def sources() -> None:
     """List PulseAudio/PipeWire monitor sources available for audio capture."""
     try:
         from stemforge.capture.monitor import list_monitor_sources
-        from stemforge.exceptions import MonitorSourceError
 
         monitor_sources = list_monitor_sources()
     except Exception as exc:
@@ -272,6 +280,7 @@ def sources() -> None:
 
 
 # ── separate command ──────────────────────────────────────────────────────────
+
 
 @app.command()
 def separate(
@@ -308,6 +317,7 @@ def separate(
 
 
 # ── convert command ───────────────────────────────────────────────────────────
+
 
 @app.command()
 def convert(
@@ -346,6 +356,7 @@ def convert(
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     app()

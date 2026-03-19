@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 from stemforge.capture.monitor import get_default_monitor_source, list_monitor_sources
 
-
 _PACTL_SHORT_OUTPUT = """\
 57\talsa_output.pci-0000_07_00.6.analog-stereo.monitor\tPipeWire\ts32le 2ch 48000Hz\tIDLE
 58\talsa_input.pci-0000_07_00.6.analog-stereo\tPipeWire\ts32le 2ch 48000Hz\tIDLE
@@ -12,7 +11,10 @@ _PACTL_SHORT_OUTPUT = """\
 
 
 def test_list_monitor_sources() -> None:
-    with patch("stemforge.capture.monitor.subprocess.check_output", return_value=_PACTL_SHORT_OUTPUT):
+    with patch(
+        "stemforge.capture.monitor.subprocess.check_output",
+        return_value=_PACTL_SHORT_OUTPUT,
+    ):
         sources = list_monitor_sources()
     assert sources == ["alsa_output.pci-0000_07_00.6.analog-stereo.monitor"]
 

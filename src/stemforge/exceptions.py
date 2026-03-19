@@ -11,6 +11,7 @@ class StemforgeError(Exception):
 
 # ── Spotify stage ────────────────────────────────────────────────────────────
 
+
 class SpotifyAuthError(StemforgeError):
     """OAuth flow failed or stored token is invalid."""
 
@@ -29,6 +30,7 @@ class PlaybackError(StemforgeError):
 
 # ── Capture stage ────────────────────────────────────────────────────────────
 
+
 class CaptureError(StemforgeError):
     """parecord failed to start, crashed, or produced an empty file."""
 
@@ -39,11 +41,13 @@ class MonitorSourceError(StemforgeError):
 
 # ── Separation stage ─────────────────────────────────────────────────────────
 
+
 class SeparationError(StemforgeError):
     """Demucs model load or inference failed."""
 
 
 # ── MIDI conversion stage ────────────────────────────────────────────────────
+
 
 class ConversionError(StemforgeError):
     """Basic-Pitch inference or MIDI write failed."""

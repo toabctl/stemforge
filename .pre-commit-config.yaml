@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v3.4.0
+    rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
@@ -9,7 +9,7 @@ repos:
     hooks:
       - id: tox
         name: tox
-        entry: tox
+        entry: uv run tox
         language: system
         pass_filenames: false
         stages: [pre-commit]

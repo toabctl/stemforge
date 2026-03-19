@@ -44,7 +44,7 @@ class StemSeparator:
         log.info("Loading audio: %s", input_wav)
         # Use soundfile to avoid torchaudio's torchcodec dependency
         data, sr = sf.read(str(input_wav), always_2d=True)  # (samples, channels)
-        wav = torch.from_numpy(data.T).float()              # (channels, samples)
+        wav = torch.from_numpy(data.T).float()  # (channels, samples)
 
         # Demucs expects (batch, channels, samples) at the model's native rate
         wav = convert_audio(
@@ -111,6 +111,4 @@ class StemSeparator:
             model.eval()
             return model
         except Exception as exc:
-            raise SeparationError(
-                f"Failed to load Demucs model {model_name!r}: {exc}"
-            ) from exc
+            raise SeparationError(f"Failed to load Demucs model {model_name!r}: {exc}") from exc

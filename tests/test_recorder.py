@@ -1,6 +1,5 @@
 """Tests for AudioRecorder."""
 
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -10,43 +9,139 @@ from stemforge.capture.recorder import AudioRecorder
 from stemforge.exceptions import CaptureError
 
 
-def test_record_missing_parecord(tmp_path: Path) -> None:
+def _make_proc(returncode: int, stderr: bytes = b"") -> MagicMock:
+    proc = MagicMock()
+    proc.returncode = returncode
+    proc.communicate.return_value = (b"", stderr)
+    return proc
+
+
+# ── Tool availability ─────────────────────────────────────────────────────────
+
+
+def test_record_no_tool_available(tmp_path: Path) -> None:
     with patch("stemforge.capture.recorder.shutil.which", return_value=None):
         recorder = AudioRecorder()
-        with pytest.raises(CaptureError, match="parecord not found"):
-            recorder.record(tmp_path / "out.wav", "@DEFAULT_MONITOR@", duration=1)
+        with pytest.raises(CaptureError, match="pw-record"):
+            recorder.record(tmp_path / "out.wav", "spotify", duration=1)
 
 
-def test_record_nonzero_exit(tmp_path: Path) -> None:
+def test_record_uses_pw_record_when_available(tmp_path: Path) -> None:
     out = tmp_path / "out.wav"
+    out.write_bytes(b"\x00" * 1024)
 
-    mock_proc = MagicMock()
-    mock_proc.returncode = 1
-    mock_proc.communicate.return_value = (b"", b"Connection refused")
+    proc = _make_proc(returncode=1)  # pw-record exits 1 on SIGTERM — allowed
 
     with (
-        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/parecord"),
-        patch("stemforge.capture.recorder.subprocess.Popen", return_value=mock_proc),
+        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
+        patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc) as mock_popen,
         patch("stemforge.capture.recorder.time.sleep"),
     ):
-        recorder = AudioRecorder()
-        with pytest.raises(CaptureError, match="exited with code 1"):
-            recorder.record(out, "@DEFAULT_MONITOR@", duration=1)
+        AudioRecorder().record(out, "spotify", duration=1)
+
+    cmd = mock_popen.call_args[0][0]
+    assert cmd[0] == "pw-record"
+    assert "--target" in cmd
+    assert "spotify" in cmd
 
 
-def test_record_empty_file(tmp_path: Path) -> None:
+def test_record_falls_back_to_parecord(tmp_path: Path) -> None:
     out = tmp_path / "out.wav"
-    out.touch()  # exists but is empty (0 bytes)
+    out.write_bytes(b"\x00" * 1024)
 
-    mock_proc = MagicMock()
-    mock_proc.returncode = 0
-    mock_proc.communicate.return_value = (b"", b"")
+    proc = _make_proc(returncode=0)
+
+    def which_side_effect(name: str) -> str | None:
+        return None if name == "pw-record" else "/usr/bin/parecord"
 
     with (
-        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/parecord"),
-        patch("stemforge.capture.recorder.subprocess.Popen", return_value=mock_proc),
+        patch("stemforge.capture.recorder.shutil.which", side_effect=which_side_effect),
+        patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc) as mock_popen,
         patch("stemforge.capture.recorder.time.sleep"),
     ):
-        recorder = AudioRecorder()
+        AudioRecorder().record(out, "@DEFAULT_MONITOR@", duration=1)
+
+    cmd = mock_popen.call_args[0][0]
+    assert cmd[0] == "parecord"
+
+
+# ── Return code handling ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("code", [0, 1, -15])
+def test_record_allowed_return_codes(tmp_path: Path, code: int) -> None:
+    """Codes 0, 1 (pw-record SIGTERM), and -15 (parecord SIGTERM) are all OK."""
+    out = tmp_path / "out.wav"
+    out.write_bytes(b"\x00" * 1024)
+
+    proc = _make_proc(returncode=code)
+
+    with (
+        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
+        patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder.time.sleep"),
+    ):
+        result = AudioRecorder().record(out, "spotify", duration=1)
+
+    assert result == out
+
+
+def test_record_unexpected_exit_code_raises(tmp_path: Path) -> None:
+    out = tmp_path / "out.wav"
+
+    proc = _make_proc(returncode=2, stderr=b"some error")
+
+    with (
+        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
+        patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder.time.sleep"),
+    ):
+        with pytest.raises(CaptureError, match="exited with code 2"):
+            AudioRecorder().record(out, "spotify", duration=1)
+
+
+# ── Output file validation ────────────────────────────────────────────────────
+
+
+def test_record_empty_file_raises(tmp_path: Path) -> None:
+    out = tmp_path / "out.wav"
+    out.touch()  # exists but zero bytes
+
+    proc = _make_proc(returncode=0)
+
+    with (
+        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
+        patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder.time.sleep"),
+    ):
         with pytest.raises(CaptureError, match="empty"):
-            recorder.record(out, "@DEFAULT_MONITOR@", duration=1)
+            AudioRecorder().record(out, "spotify", duration=1)
+
+
+def test_record_missing_file_raises(tmp_path: Path) -> None:
+    out = tmp_path / "out.wav"  # never created
+
+    proc = _make_proc(returncode=0)
+
+    with (
+        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
+        patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder.time.sleep"),
+    ):
+        with pytest.raises(CaptureError, match="empty or missing"):
+            AudioRecorder().record(out, "spotify", duration=1)
+
+
+# ── Launch failure ────────────────────────────────────────────────────────────
+
+
+def test_record_oserror_on_launch(tmp_path: Path) -> None:
+    with (
+        patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
+        patch(
+            "stemforge.capture.recorder.subprocess.Popen",
+            side_effect=OSError("No such file"),
+        ),
+    ):
+        with pytest.raises(CaptureError, match="Failed to launch"):
+            AudioRecorder().record(tmp_path / "out.wav", "spotify", duration=1)
