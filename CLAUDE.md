@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+## Audio
+
+PipeWire is required. Use PipeWire-native tools exclusively: `pw-dump` for graph discovery, `pw-record` for capture, `pw-metadata` for default device lookup. Do not use PulseAudio tools (`pactl`, `parecord`) or the `@DEFAULT_MONITOR@` alias.
+
 ## Dependencies
 
 All runtime and dev dependencies must be declared in `pyproject.toml`. Do not add dependency lists to `tox.ini` or other tool config files.
