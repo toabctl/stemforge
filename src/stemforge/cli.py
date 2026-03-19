@@ -129,8 +129,8 @@ def play(
       Ctrl+C once  → skip to next stem
       Ctrl+C twice → quit
     """
-    if shutil.which("paplay") is None:
-        err_console.print("[bold red]paplay not found.[/] Install pulseaudio-utils.")
+    if shutil.which("pw-play") is None:
+        err_console.print("[bold red]pw-play not found.[/] Install PipeWire.")
         raise typer.Exit(code=1)
 
     session_dir = session or _latest_session(_load_settings().output_dir)
@@ -143,7 +143,7 @@ def play(
         err_console.print(f"No stems directory found in {session_dir}")
         raise typer.Exit(code=1)
 
-    stem_order = ["vocals", "drums", "bass", "other"]
+    stem_order = ["vocals", "other", "drums", "bass"]
     wav_files: list[Path] = []
 
     if stem:
@@ -173,7 +173,7 @@ def play(
         rprint(f"  ▶  [bold green]{wav.stem}[/]")
         try:
             proc = subprocess.Popen(
-                ["paplay", str(wav)],
+                ["pw-play", str(wav)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
