@@ -33,9 +33,12 @@ class Settings(BaseSettings):
     )
 
     # ── Audio capture ────────────────────────────────────────────────────────
-    pulse_monitor_source: str = Field(
-        default="@DEFAULT_MONITOR@",
-        description="PulseAudio/PipeWire monitor source name",
+    pipewire_sink: str = Field(
+        default="",
+        description=(
+            "PipeWire stream node name to capture from (e.g. 'spotify'). "
+            "When empty, auto-discovered from the active Spotify stream node."
+        ),
     )
     capture_duration_seconds: int = Field(
         default=60, ge=5, le=300, description="How many seconds of audio to capture"

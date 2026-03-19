@@ -19,7 +19,7 @@ import soundfile as sf
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from stemforge.capture.monitor import get_default_monitor_source
+from stemforge.capture.monitor import get_spotify_monitor_source
 from stemforge.exceptions import CaptureError
 from stemforge.capture.recorder import AudioRecorder
 from stemforge.config import Settings
@@ -83,18 +83,38 @@ class Pipeline:
         )
         log.info("Session directory: %s", session.session_dir)
 
-        # ── Stage 4: Resolve monitor source ──────────────────────────────────
-        source = self._settings.pulse_monitor_source
-        if source == "@DEFAULT_MONITOR@":
-            source = get_default_monitor_source()
-        log.info("Monitor source: %s", source)
-
-        # ── Stage 5: Start playback ───────────────────────────────────────────
+        # ── Stage 4: Start playback ───────────────────────────────────────────
         self._spotify.start_playback(track.uri, device.id)
 
-        delay = self._settings.playback_start_delay_seconds
-        log.info("Waiting %.1f s for Spotify to buffer audio…", delay)
-        time.sleep(delay)
+        # ── Stage 5: Find the Spotify stream node in the PipeWire graph ───────
+        # Poll until the stream node appears (i.e. Spotify has opened its audio
+        # stream), then wait out any remaining buffer time before recording.
+        playback_start = time.monotonic()
+        source = self._settings.pipewire_sink or None
+        if source is None:
+            _POLL_INTERVAL = 0.5
+            deadline = playback_start + self._settings.playback_start_delay_seconds
+            while time.monotonic() < deadline:
+                time.sleep(_POLL_INTERVAL)
+                source = get_spotify_monitor_source()
+                if source:
+                    break
+            if source is None:
+                raise CaptureError(
+                    "Could not find Spotify's stream node in the PipeWire graph.\n"
+                    "Make sure Spotify is playing on this machine.\n"
+                    "You can also set PIPEWIRE_SINK in your .env to the node name shown by:\n"
+                    "  pw-dump | jq -r '.[] | select(.info.props[\"media.class\"] == "
+                    "\"Stream/Output/Audio\") | .info.props[\"node.name\"]'"
+                )
+
+        log.info("Capturing from node: %s", source)
+
+        elapsed = time.monotonic() - playback_start
+        remaining = self._settings.playback_start_delay_seconds - elapsed
+        if remaining > 0:
+            log.info("Waiting %.1f s for Spotify to buffer audio…", remaining)
+            time.sleep(remaining)
 
         # ── Stage 6: Record ───────────────────────────────────────────────────
         captured_wav = self._recorder.record(
@@ -142,7 +162,9 @@ def _assert_audio_not_silent(wav_path: Path) -> None:
     if rms < _SILENCE_RMS_THRESHOLD:
         raise CaptureError(
             f"Captured audio is silent (RMS={rms:.2e}). "
-            "Make sure Spotify is playing on this machine, not a remote device.\n"
+            "Check that:\n"
+            "  • Spotify volume is not zero\n"
+            "  • Spotify is playing on this machine, not a remote device\n"
             "Run 'stemforge devices' to see available devices and set "
             "SPOTIFY_DEVICE_NAME in your .env to pin the correct one."
         )
