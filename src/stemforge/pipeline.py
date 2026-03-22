@@ -57,12 +57,18 @@ class Pipeline:
         self._converter = MidiConverter(settings)
         log.info("All components ready.")
 
-    def run(self, query: str, duration: int | None = None) -> PipelineResult:
+    def run(
+        self,
+        query: str,
+        duration: int | None = None,
+        start: int = 0,
+    ) -> PipelineResult:
         """Execute the full pipeline for *query*.
 
         Args:
             query: Free-text Spotify search string (artist, title, or both).
             duration: Override capture duration in seconds (default from settings).
+            start: Start position in seconds (default 0).
 
         Returns:
             PipelineResult with paths to all produced artefacts.
@@ -110,11 +116,10 @@ class Pipeline:
 
         log.info("Capturing from node: %s", source)
 
-        elapsed = time.monotonic() - playback_start
-        remaining = self._settings.playback_start_delay_seconds - elapsed
-        if remaining > 0:
-            log.info("Waiting %.1f s for Spotify to buffer audio…", remaining)
-            time.sleep(remaining)
+        # ── Stage 5b: Seek to the requested start position ──────────────────
+        # Playback was started to make the stream node discoverable; now that
+        # we know the source, seek to the desired position before recording.
+        self._spotify.seek_to_position(device.id, position_seconds=start)
 
         # ── Stage 6: Record ───────────────────────────────────────────────────
         captured_wav = self._recorder.record(

@@ -157,6 +157,14 @@ class SpotifyClient:
         except Exception as exc:
             raise PlaybackError(f"Failed to start playback: {exc}") from exc
 
+    def seek_to_position(self, device_id: str, position_seconds: int = 0) -> None:
+        """Seek to a position in the current track."""
+        log.info("Seeking to %d s on device %s", position_seconds, device_id)
+        try:
+            self._sp.seek_track(position_seconds * 1000, device_id=device_id)
+        except Exception as exc:
+            raise PlaybackError(f"Failed to seek: {exc}") from exc
+
     def pause_playback(self, device_id: str) -> None:
         """Pause playback on the given device."""
         log.info("Pausing playback on device %s", device_id)

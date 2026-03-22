@@ -1,10 +1,10 @@
 """Tests for SpotifyClient device-selection logic."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from stemforge.exceptions import NoActiveDeviceError
+from stemforge.exceptions import NoActiveDeviceError, PlaybackError
 from stemforge.spotify.models import Device
 
 
@@ -30,6 +30,22 @@ def _make_client(devices_sequence: list[list[Device]]) -> "SpotifyClient":  # no
 
     client.list_devices = _list_devices
     return client
+
+
+def _make_playback_client() -> tuple["SpotifyClient", MagicMock]:  # noqa: F821
+    """Build a SpotifyClient with a mocked spotipy instance."""
+    from stemforge.config import Settings
+    from stemforge.spotify.client import SpotifyClient
+
+    settings = Settings()
+    mock_sp = MagicMock()
+
+    with patch("stemforge.spotify.client._make_auth_manager"):
+        client = SpotifyClient.__new__(SpotifyClient)
+        client._settings = settings
+        client._sp = mock_sp
+
+    return client, mock_sp
 
 
 # ── Preferred-name matching ───────────────────────────────────────────────────
@@ -91,3 +107,25 @@ def test_get_active_device_retries_until_found() -> None:
     with patch("stemforge.spotify.client.time.sleep"):
         device = client.get_active_device(retries=5, delay=0)
     assert device.name == "late-device"
+
+
+# ── seek_to_position ─────────────────────────────────────────────────────────
+
+
+def test_seek_to_position_converts_seconds_to_ms() -> None:
+    client, mock_sp = _make_playback_client()
+    client.seek_to_position("dev-1", position_seconds=30)
+    mock_sp.seek_track.assert_called_once_with(30_000, device_id="dev-1")
+
+
+def test_seek_to_position_defaults_to_zero() -> None:
+    client, mock_sp = _make_playback_client()
+    client.seek_to_position("dev-1")
+    mock_sp.seek_track.assert_called_once_with(0, device_id="dev-1")
+
+
+def test_seek_to_position_raises_on_error() -> None:
+    client, mock_sp = _make_playback_client()
+    mock_sp.seek_track.side_effect = Exception("API error")
+    with pytest.raises(PlaybackError, match="Failed to seek"):
+        client.seek_to_position("dev-1", position_seconds=10)

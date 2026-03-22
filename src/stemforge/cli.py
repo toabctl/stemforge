@@ -28,6 +28,7 @@ app = typer.Typer(
     help="Capture Spotify audio, separate stems, and generate MIDI files.",
     add_completion=False,
     pretty_exceptions_show_locals=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 console = Console()
 err_console = Console(stderr=True, style="bold red")
@@ -60,6 +61,10 @@ def run(
         Optional[int],
         typer.Option("--duration", "-d", help="Override capture duration in seconds"),
     ] = None,
+    start: Annotated[
+        int,
+        typer.Option("--start", "-s", help="Start position in seconds"),
+    ] = 0,
     verbose: VerboseOpt = False,
     quiet: QuietOpt = False,
 ) -> None:
@@ -73,7 +78,7 @@ def run(
         from stemforge.pipeline import Pipeline
 
         pipeline = Pipeline(settings)
-        result = pipeline.run(query, duration=duration)
+        result = pipeline.run(query, duration=duration, start=start)
     except StemforgeError as exc:
         err_console.print(f"\n[bold red]Pipeline failed:[/] {exc}")
         raise typer.Exit(code=2)
