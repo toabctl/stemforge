@@ -4,7 +4,6 @@ Uses the ONNX backend for inference — same ICASSP 2022 model weights as the
 TensorFlow backend but faster and without the TF startup overhead.
 
 Per-stem optimisations applied:
-  - Frequency range clamped to each instrument's realistic range
   - Stems are peak-normalised before inference so quiet stems aren't missed
   - multiple_pitch_bends enabled for expressive slides/vibrato
 
@@ -14,7 +13,6 @@ Reference: https://github.com/spotify/basic-pitch
 import logging
 import tempfile
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import soundfile as sf
@@ -23,16 +21,6 @@ from stemforge.config import Settings
 from stemforge.exceptions import ConversionError
 
 log = logging.getLogger(__name__)
-
-# Per-stem frequency constraints (Hz).
-# None means "no limit" — Basic-Pitch will use its full detection range.
-_STEM_FREQ_RANGES: dict[str, tuple[Optional[float], Optional[float]]] = {
-    "vocals": (80.0, 1100.0),  # soprano high C ≈ 1047 Hz, bass low ≈ 82 Hz
-    "bass": (40.0, 300.0),  # low B0 ≈ 31 Hz, keeps it well below midrange
-    "other": (80.0, 8000.0),  # wide — could be keys, guitar, horns, strings
-    "drums": (40.0, 8000.0),  # full range; captures both kick body and hi-hat hits
-}
-_DEFAULT_FREQ_RANGE: tuple[Optional[float], Optional[float]] = (None, None)
 
 
 def _get_onnx_model_path() -> Path:
@@ -76,8 +64,8 @@ class MidiConverter:
     def convert(self, stem_wav: Path, output_dir: Path, stem_name: str) -> Path:
         """Convert *stem_wav* to a MIDI file in *output_dir*.
 
-        Applies per-stem frequency limits, peak normalisation, and pitch-bend
-        capture before running Basic-Pitch inference.
+        Applies peak normalisation and pitch-bend capture before running
+        Basic-Pitch inference.
 
         Returns:
             Path to the written MIDI file.
@@ -88,15 +76,8 @@ class MidiConverter:
         from basic_pitch.inference import predict
 
         out_path = output_dir / f"{stem_name}.mid"
-        min_freq, max_freq = _STEM_FREQ_RANGES.get(stem_name, _DEFAULT_FREQ_RANGE)
 
-        log.info(
-            "Converting %s → %s  (freq: %s–%s Hz)",
-            stem_wav.name,
-            out_path.name,
-            min_freq or "any",
-            max_freq or "any",
-        )
+        log.info("Converting %s → %s", stem_wav.name, out_path.name)
 
         try:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -110,8 +91,6 @@ class MidiConverter:
                 onset_threshold=self._settings.midi_onset_threshold,
                 frame_threshold=self._settings.midi_frame_threshold,
                 minimum_note_length=self._settings.midi_min_note_length,
-                minimum_frequency=min_freq,
-                maximum_frequency=max_freq,
                 multiple_pitch_bends=True,
             )
             midi_data.write(str(out_path))
