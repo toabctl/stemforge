@@ -1,4 +1,4 @@
-"""Tests for SpotifyClient device-selection logic."""
+"""Tests for SpotifyClient."""
 
 from unittest.mock import MagicMock, patch
 
