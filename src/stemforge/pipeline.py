@@ -104,8 +104,8 @@ class Pipeline:
                     "Could not find Spotify's stream node in the PipeWire graph.\n"
                     "Make sure Spotify is playing on this machine.\n"
                     "You can also set PIPEWIRE_SINK in your .env to the node name shown by:\n"
-                    "  pw-dump | jq -r '.[] | select(.info.props[\"media.class\"] == "
-                    "\"Stream/Output/Audio\") | .info.props[\"node.name\"]'"
+                    '  pw-dump | jq -r \'.[] | select(.info.props["media.class"] == '
+                    '"Stream/Output/Audio") | .info.props["node.name"]\''
                 )
 
         log.info("Capturing from node: %s", source)

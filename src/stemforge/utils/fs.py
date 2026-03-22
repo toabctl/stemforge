@@ -1,9 +1,9 @@
 """Filesystem helpers: session directory creation and path management."""
 
 import re
+import shutil
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 
@@ -37,13 +37,14 @@ def build_session_paths(
     base_dir: Path,
     artist: str,
     title: str,
-    timestamp: datetime | None = None,
 ) -> SessionPaths:
-    """Create a timestamped output directory tree and return all paths."""
-    ts = (timestamp or datetime.now()).strftime("%Y%m%dT%H%M%S")
-    folder_name = f"{_slugify(artist)}-{_slugify(title)}-{ts}"
+    """Create an output directory tree, removing any previous run."""
+    folder_name = f"{_slugify(artist)}-{_slugify(title)}"
 
     session_dir = base_dir / folder_name
+    if session_dir.exists():
+        shutil.rmtree(session_dir)
+
     stems_dir = session_dir / "stems"
     midi_dir = session_dir / "midi"
 

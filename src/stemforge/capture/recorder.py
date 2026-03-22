@@ -66,10 +66,14 @@ class AudioRecorder:
 
         cmd = [
             "pw-record",
-            "--target", "0",  # no auto-linking — we wire it manually
-            "--rate", str(sample_rate),
-            "--channels", str(channels),
-            "-P", json.dumps({"node.name": _CAPTURE_NODE_NAME}),
+            "--target",
+            "0",  # no auto-linking — we wire it manually
+            "--rate",
+            str(sample_rate),
+            "--channels",
+            str(channels),
+            "-P",
+            json.dumps({"node.name": _CAPTURE_NODE_NAME}),
             str(output_path),
         ]
 
@@ -122,9 +126,7 @@ def _link_nodes(src_node: str, dst_node: str) -> None:
     Discovers port names dynamically from the live PipeWire graph so the
     code is not sensitive to port naming conventions.
     """
-    result = subprocess.run(
-        ["pw-dump"], capture_output=True, text=True, check=True
-    )
+    result = subprocess.run(["pw-dump"], capture_output=True, text=True, check=True)
     objects = json.loads(result.stdout)
 
     # Resolve node names → IDs
@@ -166,8 +168,7 @@ def _link_nodes(src_node: str, dst_node: str) -> None:
 
     if not src_ports:
         raise CaptureError(
-            f"No output ports found on {src_node!r}. "
-            "Make sure Spotify is actively playing."
+            f"No output ports found on {src_node!r}. " "Make sure Spotify is actively playing."
         )
     if not dst_ports:
         raise CaptureError(f"No input ports found on capture node {dst_node!r}.")

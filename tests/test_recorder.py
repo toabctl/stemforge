@@ -35,6 +35,7 @@ def test_record_uses_pw_record_when_available(tmp_path: Path) -> None:
     with (
         patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
         patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc) as mock_popen,
+        patch("stemforge.capture.recorder._link_nodes"),
         patch("stemforge.capture.recorder.time.sleep"),
     ):
         AudioRecorder().record(out, "spotify", duration=1)
@@ -42,27 +43,6 @@ def test_record_uses_pw_record_when_available(tmp_path: Path) -> None:
     cmd = mock_popen.call_args[0][0]
     assert cmd[0] == "pw-record"
     assert "--target" in cmd
-    assert "spotify" in cmd
-
-
-def test_record_falls_back_to_parecord(tmp_path: Path) -> None:
-    out = tmp_path / "out.wav"
-    out.write_bytes(b"\x00" * 1024)
-
-    proc = _make_proc(returncode=0)
-
-    def which_side_effect(name: str) -> str | None:
-        return None if name == "pw-record" else "/usr/bin/parecord"
-
-    with (
-        patch("stemforge.capture.recorder.shutil.which", side_effect=which_side_effect),
-        patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc) as mock_popen,
-        patch("stemforge.capture.recorder.time.sleep"),
-    ):
-        AudioRecorder().record(out, "@DEFAULT_MONITOR@", duration=1)
-
-    cmd = mock_popen.call_args[0][0]
-    assert cmd[0] == "parecord"
 
 
 # ── Return code handling ──────────────────────────────────────────────────────
@@ -79,6 +59,7 @@ def test_record_allowed_return_codes(tmp_path: Path, code: int) -> None:
     with (
         patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
         patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder._link_nodes"),
         patch("stemforge.capture.recorder.time.sleep"),
     ):
         result = AudioRecorder().record(out, "spotify", duration=1)
@@ -94,6 +75,7 @@ def test_record_unexpected_exit_code_raises(tmp_path: Path) -> None:
     with (
         patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
         patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder._link_nodes"),
         patch("stemforge.capture.recorder.time.sleep"),
     ):
         with pytest.raises(CaptureError, match="exited with code 2"):
@@ -112,6 +94,7 @@ def test_record_empty_file_raises(tmp_path: Path) -> None:
     with (
         patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
         patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder._link_nodes"),
         patch("stemforge.capture.recorder.time.sleep"),
     ):
         with pytest.raises(CaptureError, match="empty"):
@@ -126,6 +109,7 @@ def test_record_missing_file_raises(tmp_path: Path) -> None:
     with (
         patch("stemforge.capture.recorder.shutil.which", return_value="/usr/bin/pw-record"),
         patch("stemforge.capture.recorder.subprocess.Popen", return_value=proc),
+        patch("stemforge.capture.recorder._link_nodes"),
         patch("stemforge.capture.recorder.time.sleep"),
     ):
         with pytest.raises(CaptureError, match="empty or missing"):

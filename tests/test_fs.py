@@ -1,6 +1,5 @@
 """Tests for filesystem utilities."""
 
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -23,13 +22,22 @@ def test_slugify(text: str, expected: str) -> None:
 
 
 def test_build_session_paths_creates_dirs(tmp_path: Path) -> None:
-    ts = datetime(2026, 3, 18, 14, 30, 22)
-    paths = build_session_paths(tmp_path, "Daft Punk", "Get Lucky", timestamp=ts)
+    paths = build_session_paths(tmp_path, "Daft Punk", "Get Lucky")
 
     assert paths.session_dir.exists()
     assert paths.stems_dir.exists()
     assert paths.midi_dir.exists()
-    assert paths.session_dir.name == "daft-punk-get-lucky-20260318T143022"
+    assert paths.session_dir.name == "daft-punk-get-lucky"
+
+
+def test_build_session_paths_overwrites_existing(tmp_path: Path) -> None:
+    paths = build_session_paths(tmp_path, "Daft Punk", "Get Lucky")
+    stale_file = paths.stems_dir / "old.wav"
+    stale_file.touch()
+
+    paths2 = build_session_paths(tmp_path, "Daft Punk", "Get Lucky")
+    assert paths2.session_dir.exists()
+    assert not (paths2.stems_dir / "old.wav").exists()
 
 
 def test_session_paths_stem_helpers(tmp_path: Path) -> None:

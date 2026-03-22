@@ -1,44 +1,53 @@
-"""Tests for PulseAudio monitor source discovery."""
+"""Tests for PipeWire Spotify stream node discovery."""
 
 from unittest.mock import patch
 
-from stemforge.capture.monitor import get_default_monitor_source, list_monitor_sources
+from stemforge.capture.monitor import get_spotify_monitor_source
 
-_PACTL_SHORT_OUTPUT = """\
-57\talsa_output.pci-0000_07_00.6.analog-stereo.monitor\tPipeWire\ts32le 2ch 48000Hz\tIDLE
-58\talsa_input.pci-0000_07_00.6.analog-stereo\tPipeWire\ts32le 2ch 48000Hz\tIDLE
-"""
+_PW_DUMP_SPOTIFY = [
+    {
+        "id": 42,
+        "type": "PipeWire:Interface:Node",
+        "info": {
+            "props": {
+                "media.class": "Stream/Output/Audio",
+                "node.name": "spotify-output",
+                "application.name": "Spotify",
+                "application.process.binary": "spotify",
+            }
+        },
+    },
+]
 
-
-def test_list_monitor_sources() -> None:
-    with patch(
-        "stemforge.capture.monitor.subprocess.check_output",
-        return_value=_PACTL_SHORT_OUTPUT,
-    ):
-        sources = list_monitor_sources()
-    assert sources == ["alsa_output.pci-0000_07_00.6.analog-stereo.monitor"]
-
-
-def test_get_default_monitor_source_resolves() -> None:
-    sink = "alsa_output.pci-0000_07_00.6.analog-stereo"
-    monitor = f"{sink}.monitor"
-
-    with (
-        patch(
-            "stemforge.capture.monitor._get_default_sink",
-            return_value=sink,
-        ),
-        patch(
-            "stemforge.capture.monitor._source_exists",
-            return_value=True,
-        ),
-    ):
-        result = get_default_monitor_source()
-
-    assert result == monitor
+_PW_DUMP_NO_SPOTIFY = [
+    {
+        "id": 10,
+        "type": "PipeWire:Interface:Node",
+        "info": {
+            "props": {
+                "media.class": "Stream/Output/Audio",
+                "node.name": "firefox-output",
+                "application.name": "Firefox",
+                "application.process.binary": "firefox",
+            }
+        },
+    },
+]
 
 
-def test_get_default_monitor_source_fallback_on_error() -> None:
-    with patch("stemforge.capture.monitor._get_default_sink", side_effect=Exception("no pactl")):
-        result = get_default_monitor_source()
-    assert result == "@DEFAULT_MONITOR@"
+def test_get_spotify_monitor_source_found() -> None:
+    with patch("stemforge.capture.monitor._pw_dump", return_value=_PW_DUMP_SPOTIFY):
+        result = get_spotify_monitor_source()
+    assert result == "spotify-output"
+
+
+def test_get_spotify_monitor_source_not_found() -> None:
+    with patch("stemforge.capture.monitor._pw_dump", return_value=_PW_DUMP_NO_SPOTIFY):
+        result = get_spotify_monitor_source()
+    assert result is None
+
+
+def test_get_spotify_monitor_source_on_error() -> None:
+    with patch("stemforge.capture.monitor._pw_dump", side_effect=Exception("no pw-dump")):
+        result = get_spotify_monitor_source()
+    assert result is None
