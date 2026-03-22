@@ -48,8 +48,8 @@ class Settings(BaseSettings):
 
     # ── Stem separation (Demucs) ─────────────────────────────────────────────
     demucs_model: str = Field(
-        default="htdemucs_ft",
-        description="Demucs model name (htdemucs, htdemucs_ft, mdx_extra, …)",
+        default="htdemucs_6s",
+        description="Demucs model name (htdemucs_6s, htdemucs_ft, htdemucs, …)",
     )
     demucs_device: Literal["cuda", "cpu", "mps"] = Field(
         default="cpu",
@@ -64,13 +64,13 @@ class Settings(BaseSettings):
 
     # ── Basic-Pitch MIDI conversion ──────────────────────────────────────────
     midi_onset_threshold: float = Field(
-        default=0.3,
+        default=0.5,
         ge=0.0,
         le=1.0,
         description="Note onset sensitivity (lower = more notes detected)",
     )
     midi_frame_threshold: float = Field(
-        default=0.1,
+        default=0.3,
         ge=0.0,
         le=1.0,
         description="Note frame sensitivity (lower = more notes detected)",

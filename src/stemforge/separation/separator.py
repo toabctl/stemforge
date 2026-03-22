@@ -5,7 +5,9 @@ model is loaded once and reused across multiple files, and so that errors
 surface as Python exceptions rather than sys.exit() calls.
 
 Model output tensor shape: (sources, channels, samples)
-Model source names: ["drums", "bass", "other", "vocals"] (htdemucs)
+Model source names depend on the model:
+  htdemucs / htdemucs_ft: ["drums", "bass", "other", "vocals"]
+  htdemucs_6s:            ["drums", "bass", "other", "vocals", "guitar", "piano"]
 """
 
 import logging
