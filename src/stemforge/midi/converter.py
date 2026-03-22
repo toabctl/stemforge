@@ -5,7 +5,7 @@ TensorFlow backend but faster and without the TF startup overhead.
 
 Per-stem optimisations applied:
   - Stems are peak-normalised before inference so quiet stems aren't missed
-  - multiple_pitch_bends enabled for expressive slides/vibrato
+  - All notes on a single MIDI track/channel for clean DAW import
 
 Reference: https://github.com/spotify/basic-pitch
 """
@@ -91,7 +91,7 @@ class MidiConverter:
                 onset_threshold=self._settings.midi_onset_threshold,
                 frame_threshold=self._settings.midi_frame_threshold,
                 minimum_note_length=self._settings.midi_min_note_length,
-                multiple_pitch_bends=True,
+                multiple_pitch_bends=False,
             )
             midi_data.write(str(out_path))
         except Exception as exc:
