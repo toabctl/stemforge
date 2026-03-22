@@ -25,7 +25,7 @@ output/daft-punk-get-lucky-20260318T143022/
 
 1. **Search** — finds the track via the Spotify Web API
 2. **Capture** — triggers playback on Spotify, discovers the Spotify stream node in the PipeWire graph via `pw-dump`, then records directly from it using `pw-record` + `pw-link` (no sink monitor required)
-3. **Separate** — runs [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs_ft` model) to split into vocals / drums / bass / other
+3. **Separate** — runs [Demucs](https://github.com/facebookresearch/demucs) (`htdemucs_6s` model) to split into vocals / drums / bass / guitar / piano / other
 4. **Convert** — runs [Basic-Pitch](https://github.com/spotify/basic-pitch) (Spotify Research) on each stem to produce MIDI files
 
 ## Requirements
@@ -126,7 +126,7 @@ All settings can be set in `.env` or as environment variables:
 | `CAPTURE_DURATION_SECONDS` | `60` | Recording length in seconds (5–300) |
 | `CAPTURE_SAMPLE_RATE` | `44100` | Sample rate in Hz |
 | `CAPTURE_CHANNELS` | `2` | Channels (1=mono, 2=stereo) |
-| `DEMUCS_MODEL` | `htdemucs_ft` | Demucs model name |
+| `DEMUCS_MODEL` | `htdemucs_6s` | Demucs model name |
 | `DEMUCS_DEVICE` | `cpu` | `cpu`, `cuda`, or `mps` |
 | `DEMUCS_SHIFTS` | `2` | Random shifts for quality (higher = slower) |
 | `MIDI_ONSET_THRESHOLD` | `0.3` | Note onset sensitivity (lower = more notes) |

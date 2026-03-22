@@ -14,7 +14,7 @@ def test_settings_loads_with_env(monkeypatch) -> None:
     assert s.spotify_client_secret == "csec"
     # Current defaults
     assert s.capture_duration_seconds == 60
-    assert s.demucs_model == "htdemucs_ft"
+    assert s.demucs_model == "htdemucs_6s"
     assert s.demucs_shifts == 2
 
 
