@@ -3,7 +3,7 @@
 Sequences the four stages in order, threading outputs between stages:
 
   1. Spotify search + playback trigger
-  2. System audio capture (parecord)
+  2. PipeWire audio capture (pw-record)
   3. Stem separation (Demucs)
   4. MIDI conversion (Basic-Pitch)
 
@@ -44,6 +44,53 @@ class PipelineResult:
     midi_paths: dict[str, Path] = field(default_factory=dict)
 
 
+class RecordPipeline:
+    """Orchestrates Spotify → WAV capture only (no separation or MIDI)."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._spotify = SpotifyClient(settings)
+        self._recorder = AudioRecorder()
+
+    def run(
+        self,
+        query: str,
+        duration: int | None = None,
+        start: int = 0,
+    ) -> PipelineResult:
+        """Search for a track, record it, and return the captured WAV path."""
+        capture_duration = duration or self._settings.capture_duration_seconds
+
+        track = self._spotify.search(query)
+        device = self._spotify.get_active_device(
+            preferred_name=self._settings.spotify_device_name
+        )
+        session = build_session_paths(
+            self._settings.output_dir,
+            artist=track.artist,
+            title=track.name,
+        )
+        log.info("Session directory: %s", session.session_dir)
+
+        captured_wav = _capture_spotify(
+            spotify=self._spotify,
+            recorder=self._recorder,
+            settings=self._settings,
+            track=track,
+            device=device,
+            session=session,
+            duration=capture_duration,
+            start=start,
+        )
+
+        return PipelineResult(
+            track=track,
+            device=device,
+            session=session,
+            captured_wav=captured_wav,
+        )
+
+
 class Pipeline:
     """Orchestrates the full Spotify → WAV → stems → MIDI pipeline."""
 
@@ -75,13 +122,10 @@ class Pipeline:
         """
         capture_duration = duration or self._settings.capture_duration_seconds
 
-        # ── Stage 1: Find the track ──────────────────────────────────────────
         track = self._spotify.search(query)
-
-        # ── Stage 2: Find a playback device ──────────────────────────────────
-        device = self._spotify.get_active_device(preferred_name=self._settings.spotify_device_name)
-
-        # ── Stage 3: Create output directory tree ────────────────────────────
+        device = self._spotify.get_active_device(
+            preferred_name=self._settings.spotify_device_name
+        )
         session = build_session_paths(
             self._settings.output_dir,
             artist=track.artist,
@@ -89,57 +133,18 @@ class Pipeline:
         )
         log.info("Session directory: %s", session.session_dir)
 
-        # ── Stage 4: Start playback ───────────────────────────────────────────
-        self._spotify.start_playback(track.uri, device.id)
-
-        # ── Stage 5: Find the Spotify stream node in the PipeWire graph ───────
-        # Poll until the stream node appears (i.e. Spotify has opened its audio
-        # stream), then wait out any remaining buffer time before recording.
-        playback_start = time.monotonic()
-        source = self._settings.pipewire_sink or None
-        if source is None:
-            _POLL_INTERVAL = 0.5
-            deadline = playback_start + self._settings.playback_start_delay_seconds
-            while time.monotonic() < deadline:
-                time.sleep(_POLL_INTERVAL)
-                source = get_spotify_monitor_source()
-                if source:
-                    break
-            if source is None:
-                raise CaptureError(
-                    "Could not find Spotify's stream node in the PipeWire graph.\n"
-                    "Make sure Spotify is playing on this machine.\n"
-                    "You can also set PIPEWIRE_SINK in your .env to the node name shown by:\n"
-                    '  pw-dump | jq -r \'.[] | select(.info.props["media.class"] == '
-                    '"Stream/Output/Audio") | .info.props["node.name"]\''
-                )
-
-        log.info("Capturing from node: %s", source)
-
-        # ── Stage 5b: Seek to the requested start position ──────────────────
-        # Playback was started to make the stream node discoverable; now that
-        # we know the source, seek to the desired position before recording.
-        self._spotify.seek_to_position(device.id, position_seconds=start)
-
-        # ── Stage 6: Record ───────────────────────────────────────────────────
-        captured_wav = self._recorder.record(
-            output_path=session.captured_wav,
-            source=source,
+        captured_wav = _capture_spotify(
+            spotify=self._spotify,
+            recorder=self._recorder,
+            settings=self._settings,
+            track=track,
+            device=device,
+            session=session,
             duration=capture_duration,
-            sample_rate=self._settings.capture_sample_rate,
-            channels=self._settings.capture_channels,
+            start=start,
         )
 
-        # ── Stage 7: Stop playback ────────────────────────────────────────────
-        self._spotify.pause_playback(device.id)
-
-        # ── Stage 7b: Sanity-check the capture ───────────────────────────────
-        _assert_audio_not_silent(captured_wav)
-
-        # ── Stage 8: Separate stems ───────────────────────────────────────────
         stem_paths = self._separator.separate(captured_wav, session.stems_dir)
-
-        # ── Stage 9: Convert each stem to MIDI ────────────────────────────────
         midi_paths = self._converter.convert_all(stem_paths, session.midi_dir)
 
         return PipelineResult(
@@ -150,6 +155,55 @@ class Pipeline:
             stem_paths=stem_paths,
             midi_paths=midi_paths,
         )
+
+
+def _capture_spotify(
+    *,
+    spotify: SpotifyClient,
+    recorder: AudioRecorder,
+    settings: Settings,
+    track: Track,
+    device: Device,
+    session: SessionPaths,
+    duration: int,
+    start: int,
+) -> Path:
+    """Start Spotify playback, discover the PipeWire node, and record to WAV."""
+    spotify.start_playback(track.uri, device.id)
+
+    playback_start = time.monotonic()
+    source = settings.pipewire_sink or None
+    if source is None:
+        _POLL_INTERVAL = 0.5
+        deadline = playback_start + settings.playback_start_delay_seconds
+        while time.monotonic() < deadline:
+            time.sleep(_POLL_INTERVAL)
+            source = get_spotify_monitor_source()
+            if source:
+                break
+        if source is None:
+            raise CaptureError(
+                "Could not find Spotify's stream node in the PipeWire graph.\n"
+                "Make sure Spotify is playing on this machine.\n"
+                "You can also set PIPEWIRE_SINK in your .env to the node name shown by:\n"
+                '  pw-dump | jq -r \'.[] | select(.info.props["media.class"] == '
+                '"Stream/Output/Audio") | .info.props["node.name"]\''
+            )
+
+    log.info("Capturing from node: %s", source)
+    spotify.seek_to_position(device.id, position_seconds=start)
+
+    captured_wav = recorder.record(
+        output_path=session.captured_wav,
+        source=source,
+        duration=duration,
+        sample_rate=settings.capture_sample_rate,
+        channels=settings.capture_channels,
+    )
+
+    spotify.pause_playback(device.id)
+    _assert_audio_not_silent(captured_wav)
+    return captured_wav
 
 
 _SILENCE_RMS_THRESHOLD = 1e-4  # anything below this is considered silence

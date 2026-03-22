@@ -1,12 +1,15 @@
 """Typer CLI for stemforge.
 
-Commands:
-  run       Full pipeline: search → capture → separate → MIDI
-  play      Play separated stems from a session (default: latest)
-  devices   List available Spotify Connect devices
-  sources   List PulseAudio/PipeWire monitor sources
-  separate  Run stem separation on an existing WAV file
-  convert   Run MIDI conversion on an existing stem WAV file
+Pipeline commands:
+  run       Full pipeline: search → record → split → midi
+  record    Record a Spotify track to WAV
+  split     Split a WAV file into stems (Demucs)
+  midi      Convert stem WAV file(s) to MIDI (Basic-Pitch)
+  play      Play separated stems from a session
+
+Diagnostic commands:
+  info devices   List Spotify Connect devices
+  info streams   List PipeWire audio stream nodes
 """
 
 import shutil
@@ -30,6 +33,12 @@ app = typer.Typer(
     pretty_exceptions_show_locals=False,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+info_app = typer.Typer(
+    help="Show environment and diagnostic information.",
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+app.add_typer(info_app, name="info")
+
 console = Console()
 err_console = Console(stderr=True, style="bold red")
 
@@ -51,6 +60,13 @@ def _load_settings() -> Settings:
         raise typer.Exit(code=1)
 
 
+def _size(p: Path) -> str:
+    if not p.exists():
+        return "?"
+    b = p.stat().st_size
+    return f"{b / 1024:.1f} KB" if b >= 1024 else f"{b} B"
+
+
 # ── run command ───────────────────────────────────────────────────────────────
 
 
@@ -68,7 +84,7 @@ def run(
     verbose: VerboseOpt = False,
     quiet: QuietOpt = False,
 ) -> None:
-    """Run the full pipeline: search → capture → separate stems → generate MIDI."""
+    """Run the full pipeline: search → record → split stems → generate MIDI."""
     configure_logging(verbose=verbose, quiet=quiet)
     settings = _load_settings()
 
@@ -94,12 +110,6 @@ def run(
     table.add_column("File", style="white")
     table.add_column("Size", justify="right", style="dim")
 
-    def _size(p: Path) -> str:
-        if not p.exists():
-            return "?"
-        b = p.stat().st_size
-        return f"{b / 1024:.1f} KB" if b >= 1024 else f"{b} B"
-
     table.add_row("Capture", str(result.captured_wav), _size(result.captured_wav))
     for name, path in sorted(result.stem_paths.items()):
         table.add_row(f"Stem ({name})", str(path), _size(path))
@@ -108,6 +118,143 @@ def run(
 
     console.print(table)
     rprint(f"\n[dim]Session directory: {result.session.session_dir}[/]")
+
+
+# ── record command ────────────────────────────────────────────────────────────
+
+
+@app.command()
+def record(
+    query: Annotated[str, typer.Argument(help="Track search query (artist, title, or both)")],
+    duration: Annotated[
+        Optional[int],
+        typer.Option("--duration", "-d", help="Override capture duration in seconds"),
+    ] = None,
+    start: Annotated[
+        int,
+        typer.Option("--start", "-s", help="Start position in seconds"),
+    ] = 0,
+    verbose: VerboseOpt = False,
+    quiet: QuietOpt = False,
+) -> None:
+    """Record a Spotify track to WAV (no stem separation or MIDI conversion)."""
+    configure_logging(verbose=verbose, quiet=quiet)
+    settings = _load_settings()
+
+    rprint(f"\n[bold cyan]stemforge record[/] — recording [green]{query!r}[/]\n")
+
+    try:
+        from stemforge.pipeline import RecordPipeline
+
+        pipeline = RecordPipeline(settings)
+        result = pipeline.run(query, duration=duration, start=start)
+    except StemforgeError as exc:
+        err_console.print(f"\n[bold red]Recording failed:[/] {exc}")
+        raise typer.Exit(code=2)
+    except KeyboardInterrupt:
+        rprint("\n[yellow]Aborted by user.[/]")
+        raise typer.Exit(code=130)
+
+    rprint(f"\n[bold green]Done![/] Track: {result.track}")
+    rprint(f"  WAV: {result.captured_wav}  ({_size(result.captured_wav)})")
+    rprint(f"\n[dim]Session directory: {result.session.session_dir}[/]")
+
+
+# ── split command ─────────────────────────────────────────────────────────────
+
+
+@app.command()
+def split(
+    wav_file: Annotated[Path, typer.Argument(help="Path to input WAV file")],
+    output_dir: Annotated[
+        Optional[Path],
+        typer.Option("--output", "-o", help="Output directory (default: stems/ next to WAV)"),
+    ] = None,
+    model: Annotated[
+        Optional[str],
+        typer.Option("--model", "-m", help="Demucs model (htdemucs_6s, htdemucs_ft, htdemucs)"),
+    ] = None,
+    verbose: VerboseOpt = False,
+    quiet: QuietOpt = False,
+) -> None:
+    """Split a WAV file into stems using Demucs."""
+    configure_logging(verbose=verbose, quiet=quiet)
+    settings = _load_settings()
+    if model:
+        settings.demucs_model = model
+
+    if not wav_file.exists():
+        err_console.print(f"File not found: {wav_file}")
+        raise typer.Exit(code=1)
+
+    stems_dir = output_dir or wav_file.parent / "stems"
+    stems_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        from stemforge.separation.separator import StemSeparator
+
+        separator = StemSeparator(settings)
+        stem_paths = separator.separate(wav_file, stems_dir)
+    except StemforgeError as exc:
+        err_console.print(f"[bold red]Separation failed:[/] {exc}")
+        raise typer.Exit(code=2)
+
+    rprint(f"\n[bold green]Stems written to:[/] {stems_dir}\n")
+    for name, path in sorted(stem_paths.items()):
+        rprint(f"  [cyan]{name}[/] → {path}")
+
+
+# ── midi command ──────────────────────────────────────────────────────────────
+
+
+@app.command()
+def midi(
+    path: Annotated[
+        Path,
+        typer.Argument(help="WAV file or directory of stem WAVs to convert"),
+    ],
+    output_dir: Annotated[
+        Optional[Path],
+        typer.Option("--output", "-o", help="Output directory (default: midi/ next to input)"),
+    ] = None,
+    verbose: VerboseOpt = False,
+    quiet: QuietOpt = False,
+) -> None:
+    """Convert stem WAV file(s) to MIDI using Basic-Pitch.
+
+    Accepts either a single WAV file or a directory of stems.
+    """
+    configure_logging(verbose=verbose, quiet=quiet)
+    settings = _load_settings()
+
+    if not path.exists():
+        err_console.print(f"Not found: {path}")
+        raise typer.Exit(code=1)
+
+    if path.is_dir():
+        wav_files = sorted(path.glob("*.wav"))
+        if not wav_files:
+            err_console.print(f"No WAV files found in {path}")
+            raise typer.Exit(code=1)
+        midi_dir = output_dir or path.parent / "midi"
+    else:
+        wav_files = [path]
+        midi_dir = output_dir or path.parent
+
+    midi_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        from stemforge.midi.converter import MidiConverter
+
+        converter = MidiConverter(settings)
+        for wav in wav_files:
+            midi_path = converter.convert(wav, midi_dir, wav.stem)
+            rprint(f"  [cyan]{wav.stem}[/] → {midi_path}")
+    except StemforgeError as exc:
+        err_console.print(f"[bold red]Conversion failed:[/] {exc}")
+        raise typer.Exit(code=2)
+
+    rprint(f"\n[bold green]MIDI written to:[/] {midi_dir}")
 
 
 # ── play command ─────────────────────────────────────────────────────────────
@@ -148,7 +295,7 @@ def play(
         err_console.print(f"No stems directory found in {session_dir}")
         raise typer.Exit(code=1)
 
-    stem_order = ["vocals", "other", "drums", "bass"]
+    stem_order = ["vocals", "guitar", "piano", "other", "drums", "bass"]
     wav_files: list[Path] = []
 
     if stem:
@@ -215,10 +362,10 @@ def _latest_session(output_dir: Path) -> Optional[Path]:
     return sessions[0] if sessions else None
 
 
-# ── devices command ───────────────────────────────────────────────────────────
+# ── info devices command ──────────────────────────────────────────────────────
 
 
-@app.command()
+@info_app.command()
 def devices(
     verbose: VerboseOpt = False,
 ) -> None:
@@ -256,108 +403,55 @@ def devices(
     console.print(table)
 
 
-# ── sources command ───────────────────────────────────────────────────────────
+# ── info streams command ─────────────────────────────────────────────────────
 
 
-@app.command()
-def sources() -> None:
-    """List PulseAudio/PipeWire monitor sources available for audio capture."""
+@info_app.command()
+def streams() -> None:
+    """List active PipeWire audio output streams.
+
+    Shows all Stream/Output/Audio nodes visible in the PipeWire graph.
+    Useful for finding the node name to set as PIPEWIRE_SINK in your .env.
+    """
+    import json
+
     try:
-        from stemforge.capture.monitor import list_monitor_sources
-
-        monitor_sources = list_monitor_sources()
+        result = subprocess.run(
+            ["pw-dump"], capture_output=True, text=True, check=True
+        )
+        objects = json.loads(result.stdout)
+    except FileNotFoundError:
+        err_console.print("[bold red]pw-dump not found.[/] Install PipeWire.")
+        raise typer.Exit(code=1)
     except Exception as exc:
         err_console.print(f"[bold red]Error:[/] {exc}")
         raise typer.Exit(code=2)
 
-    if not monitor_sources:
-        rprint("[yellow]No monitor sources found. Is PulseAudio/PipeWire running?[/]")
+    table = Table(title="PipeWire Audio Output Streams", header_style="bold magenta")
+    table.add_column("Node Name", style="cyan")
+    table.add_column("Application")
+    table.add_column("ID", justify="right", style="dim")
+
+    found = False
+    for obj in objects:
+        if obj.get("type") != "PipeWire:Interface:Node":
+            continue
+        props = obj.get("info", {}).get("props", {})
+        if props.get("media.class") != "Stream/Output/Audio":
+            continue
+        found = True
+        table.add_row(
+            props.get("node.name", "—"),
+            props.get("application.name", props.get("application.process.binary", "—")),
+            str(obj.get("id", "—")),
+        )
+
+    if not found:
+        rprint("[yellow]No audio output streams found. Is anything playing?[/]")
         raise typer.Exit(code=1)
-
-    table = Table(title="Monitor Sources", header_style="bold magenta")
-    table.add_column("Source Name", style="cyan")
-
-    for s in monitor_sources:
-        table.add_row(s)
 
     console.print(table)
-    rprint("\n[dim]Set PULSE_MONITOR_SOURCE=<name> in .env to use a specific source.[/]")
-
-
-# ── separate command ──────────────────────────────────────────────────────────
-
-
-@app.command()
-def separate(
-    wav_file: Annotated[Path, typer.Argument(help="Path to input WAV file")],
-    output_dir: Annotated[
-        Optional[Path],
-        typer.Option("--output", "-o", help="Output directory (default: next to WAV)"),
-    ] = None,
-    verbose: VerboseOpt = False,
-) -> None:
-    """Run stem separation on an existing WAV file (skips capture stage)."""
-    configure_logging(verbose=verbose)
-    settings = _load_settings()
-
-    if not wav_file.exists():
-        err_console.print(f"File not found: {wav_file}")
-        raise typer.Exit(code=1)
-
-    stems_dir = output_dir or wav_file.parent / "stems"
-    stems_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        from stemforge.separation.separator import StemSeparator
-
-        separator = StemSeparator(settings)
-        stem_paths = separator.separate(wav_file, stems_dir)
-    except StemforgeError as exc:
-        err_console.print(f"[bold red]Separation failed:[/] {exc}")
-        raise typer.Exit(code=2)
-
-    rprint(f"\n[bold green]Stems written to:[/] {stems_dir}\n")
-    for name, path in sorted(stem_paths.items()):
-        rprint(f"  [cyan]{name}[/] → {path}")
-
-
-# ── convert command ───────────────────────────────────────────────────────────
-
-
-@app.command()
-def convert(
-    wav_file: Annotated[Path, typer.Argument(help="Path to stem WAV file")],
-    output_dir: Annotated[
-        Optional[Path],
-        typer.Option("--output", "-o", help="Output directory (default: next to WAV)"),
-    ] = None,
-    stem_name: Annotated[
-        Optional[str],
-        typer.Option("--name", "-n", help="Stem name (used as output filename)"),
-    ] = None,
-    verbose: VerboseOpt = False,
-) -> None:
-    """Convert a single stem WAV file to MIDI using Basic-Pitch."""
-    configure_logging(verbose=verbose)
-
-    if not wav_file.exists():
-        err_console.print(f"File not found: {wav_file}")
-        raise typer.Exit(code=1)
-
-    midi_dir = output_dir or wav_file.parent
-    midi_dir.mkdir(parents=True, exist_ok=True)
-    name = stem_name or wav_file.stem
-
-    try:
-        from stemforge.midi.converter import MidiConverter
-
-        converter = MidiConverter()
-        midi_path = converter.convert(wav_file, midi_dir, name)
-    except StemforgeError as exc:
-        err_console.print(f"[bold red]Conversion failed:[/] {exc}")
-        raise typer.Exit(code=2)
-
-    rprint(f"\n[bold green]MIDI written:[/] {midi_path}")
+    rprint("\n[dim]Set PIPEWIRE_SINK=<node name> in .env to pin a specific source.[/]")
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
