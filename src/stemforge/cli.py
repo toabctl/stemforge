@@ -416,9 +416,7 @@ def streams() -> None:
     import json
 
     try:
-        result = subprocess.run(
-            ["pw-dump"], capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(["pw-dump"], capture_output=True, text=True, check=True)
         objects = json.loads(result.stdout)
     except FileNotFoundError:
         err_console.print("[bold red]pw-dump not found.[/] Install PipeWire.")
