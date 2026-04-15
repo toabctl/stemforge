@@ -62,9 +62,7 @@ class RecordPipeline:
         capture_duration = duration or self._settings.capture_duration_seconds
 
         track = self._spotify.search(query)
-        device = self._spotify.get_active_device(
-            preferred_name=self._settings.spotify_device_name
-        )
+        device = self._spotify.get_active_device(preferred_name=self._settings.spotify_device_name)
         session = build_session_paths(
             self._settings.output_dir,
             artist=track.artist,
@@ -123,9 +121,7 @@ class Pipeline:
         capture_duration = duration or self._settings.capture_duration_seconds
 
         track = self._spotify.search(query)
-        device = self._spotify.get_active_device(
-            preferred_name=self._settings.spotify_device_name
-        )
+        device = self._spotify.get_active_device(preferred_name=self._settings.spotify_device_name)
         session = build_session_paths(
             self._settings.output_dir,
             artist=track.artist,
